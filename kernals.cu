@@ -7,9 +7,9 @@ __global__ void child_launch(int *i){
     int b_idx = blockIdx.x*blockDim.x;
     int idx = t_idx+b_idx
 
-    // get a random number
-    int rnd;
-
+    // get a random number between 0 and 1
+    float rnd_float = curand_uniform(&localstate)
+    int rnd = int(rnd_float*10) //convert this to an interger number of seconds 0 to 10
     int child_out[3] = [idx, i, rnd];
     // transfer id to an array in memory:
        // Shared
@@ -28,17 +28,20 @@ __global__ void child_collect(){
 }
 
 
-__global__ void populate_random(int length, float *rnd_array, curandStatePhilox4_32_10_t *state){
+// Kernel to initialise RNG on the GPU. Used the cuRAND device API with one
+// RNG sequence per CUDA thread.
+__global__ void init_gpurand(unsigned long long seed, int ngrids, curandState *state){
 
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
 
-    if (idx < length){
-        // 4 random numbers
-        float4 rnd = curand_uniform4(&state[idx]);
+    if (idx<ngrids){
 
-        // use one of these
-        rnd_array[idx] = rnd.z;
-    }      
-
-    return;
+        unsigned long long seq = (unsigned long long)idx;
+        
+        // Seperate subsequence for each thread
+        curand_init(seed, seq, 0ull, &state[idx]);
+    
+        // Different seed for each thread (faster but risky)
+        //curand_init(seed+23498*idx, 0ull, 0ull, &state[idx]);
+    }
 }

@@ -3,5 +3,5 @@
 #include <curand_kernel.h>
 #include "kernals.h"
 
-__global__ void d_main(int *N_child);
+__global__ void d_main(int *N_child, curandState *d_state);
 

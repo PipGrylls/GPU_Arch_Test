@@ -46,7 +46,8 @@ int main () {
     int N_child = 5; // which all launch 5 children
 
     // Initilise RNG on GPU
-    gpuErrchk (cudaMalloc((void **)&d_state, ngrids*sizeof(curandState)) );
+    curandState *d_state;
+    gpuErrchk (cudaMalloc((void **)&d_state, N_bl*N_th*sizeof(curandState)) );
     unsigned long long gpuseed = (unsigned long long)rngseed;
     init_gpurand<<<N_bl,N_th>>>(gpuseed, ngrids, d_state);
     gpuErrchk( cudaPeekAtLastError() );
@@ -59,7 +60,7 @@ int main () {
 
     // Launch d_main
     cudaMemcpy(dev_N_child, N_child, cudaMemcpyDeviceToHost)
-    <<<N_bl, N_th>>>d_main();
+    <<<N_bl, N_th>>>d_main(N_child, d_state);
 
 
 
