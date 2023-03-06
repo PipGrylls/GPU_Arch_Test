@@ -6,7 +6,7 @@ prefix     = $(HOME)
 bindir     = $(prefix)/bin
 
 # Define objects in dependency order
-OBJECTS   = kernals.o d_main.o main.o
+OBJECTS   = mt19937ar.o kernals.o d_main.o
 
 CC    = gcc
 NVCC  = nvcc
@@ -26,7 +26,10 @@ NVFLAGS = -O3 -gencode arch=compute_50,code=sm_50 \
 			  -gencode arch=compute_86,code=sm_86 \
 			  -gencode arch=compute_87,code=sm_87 \
 			  -gencode arch=compute_89,code=sm_89 \
-			  -gencode arch=compute_90,code=sm_90 --generate-line-info
+			  -gencode arch=compute_90,code=sm_90 \
+			  --generate-line-info \
+			  -rdc=true -lcudadevrt
+
 
 .PRECIOUS: %.o
 .PHONY:  clean
@@ -41,7 +44,7 @@ all : GPU_Arch_Test
 	$(NVCC) $(NVFLAGS) -c -o $@ $<
 
 
-GPU_2DIsing :  $(OBJECTS) ising.cu
+GPU_Arch_Test :  $(OBJECTS) main.cu
 
 	$(LD) -o $(bindir)/GPU_Arch_Test $(OBJECTS) main.cu $(NVFLAGS) 
 

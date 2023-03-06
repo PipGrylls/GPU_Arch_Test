@@ -5,6 +5,7 @@
 #include <cuda.h>
 #include "d_main.h"
 #include "kernals.h"
+#include "mt19937ar.h"
 
 
 int main () {
@@ -22,15 +23,15 @@ int main () {
         devConcurrentKernals;
     int maxThreads[3], maxGrid[3];
     cudaGetDevice(&cudaDevice);
-    printf(cudaDevice);
+    printf("%c", (char)(cudaDevice));
     cudaSetDevice(cudaDevice) ;
     // Really we should query property by property as this has some excess overhead,
     // while we dont know what properties we need this is preferable.
-    cudaGetDeviceProperties(&prop, cudaDevice)
-    devConcurrentKernals = prop.concurrantKernals;
-    if (devConcurrentKernals == 0) {
-        printf("Error, this code requires concurrant kernal launches CC>5")
-        exit()
+    cudaGetDeviceProperties(&prop, cudaDevice);
+    int devConcurrentKernels = prop.concurrentKernels;
+    if (devConcurrentKernels == 0) {
+        printf("Error, this code requires concurrant kernal launches CC>5");
+        exit(1);
     }
 
     // Get Threads and blocks
@@ -38,56 +39,62 @@ int main () {
     devSharedMemPerBlock = prop.sharedMemPerBlock;
     devThreadsPerblock = prop.maxThreadsPerBlock;
     devMultiProc = prop.multiProcessorCount;
-
-
        
-    int N_bl = 5; //we are going to span 5 blocks 
+    int N_bl = 5; //we are going to span 5 blocks
     int N_th = 5; //with 5 threads
     int N_child = 5; // which all launch 5 children
 
+
     // Initilise RNG on GPU
     curandState *d_state;
-    gpuErrchk (cudaMalloc((void **)&d_state, N_bl*N_th*sizeof(curandState)) );
+    cudaMalloc((void **)&d_state, N_bl*N_th*sizeof(curandState));
     unsigned long long gpuseed = (unsigned long long)rngseed;
-    init_gpurand<<<N_bl,N_th>>>(gpuseed, ngrids, d_state);
-    gpuErrchk( cudaPeekAtLastError() );
-    gpuErrchk( cudaDeviceSynchronize() );
 
+    // create global memory array for child output
+    int *host_child_out;
+    cudaHostAlloc((void**)&host_child_out, N_child*N_th*N_bl*sizeof(int), cudaHostAllocDefault);
 
-    // Put some data in memory
+    // Create varable to instuct dmain on how to launch children
     int *dev_N_child;
-    cudaMalloc( (void**)&dev_N_child, sizeof(N_child))
-
-    // Launch d_main
-    cudaMemcpy(dev_N_child, N_child, cudaMemcpyDeviceToHost)
-    <<<N_bl, N_th>>>d_main(N_child, d_state);
+    cudaMalloc( (void**)&dev_N_child, sizeof(N_child));
 
 
+    // dynamically sized arrays
+    int dev_child_out[N_bl];
+    cudaStream_t streams[N_bl];
 
-    
-    // Allocated memory to return info from streams
-    int host_collect[2];
-    int *dev_collect;
-    cudaMalloc((void(**)&dev_collect))
-    
-    //Setup Collection streams
-    // One stream to start with more later
-    cudaStream_t stream;
-    cudaStreamCreate(&stream);
-    // LOOP
-    for (int i; i<N_bl*N_th*N_child; i++){
-        // Launch collection kernals
-         <<<1,1, stream>>>child_collect(&dev_collect, 2*sizeof(int));
-        // Launch Memcpy
-        cudaMemCpy(dev_collect, host_collet, 2*sizeof(int));
-        // This should print the rank then how long it waited in seconds
-        printf(host_collect);
+    for (int i=0;i<N_bl;i++){
+        cudaStreamCreate(&streams[i]);
+        cudaMalloc((void**)dev_child_out[i], N_child*N_th*sizeof(int));
     }
-    //ENDLOOP
+    for (int i=0;i<N_bl;i++){
+        // init the RNG
+        init_gpurand<<<1,N_th,0,streams[i]>>>(gpuseed, N_bl, d_state);
+    }
+    for (int i=0;i<N_bl;i++){
+        // Launch d_main
+        cudaMemcpyAsync(dev_N_child, N_child, cudaMemcpyDeviceToHost,  streams[i]);
+    }
+    for (int i=0;i<N_bl;i++){
+        d_main<<<1, N_th,0,streams[i]>>>(N_child, d_state, dev_child_out[i]);
+    }
 
+    for (int i=0;i<N_bl;i++){
+        cudaMemCpyAsync(host_child_out+i*N_child*N_th, dev_child_out[i], N_child*N_th*sizeof(int), streams[i]);
+    }
+
+    //Synchronise
+
+    for (int i=0;i<N_bl;i++){
+        cudaFree(dev_child_out[i]);
+        cudaStreamDestory(streams[i]);
+    }
+
+
+    printf(host_child_out);
     // Free the memory
-    free(host_collect);
-    cudaFree(dev_collect);
+    cudaFreeHost(host_child_out);
+    cudaFree(dev_N_child);
 
     // Output
     printf("Done!");
