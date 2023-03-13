@@ -1,3 +1,5 @@
+// -*- mode: C -*-
+
 #include "kernals.h"
 
 __global__ void child_launch(int i, curandState_t localstate, int p_idx, int *child_out){
@@ -22,8 +24,6 @@ __global__ void child_launch(int i, curandState_t localstate, int p_idx, int *ch
     
     // exit
 }
-
-
 
 
 // Kernel to initialise RNG on the GPU. Used the cuRAND device API with one

@@ -1,11 +1,6 @@
-#ifndef D_MAIN_H
-#define D_MAIN_H
-
 #include <cuda.h>
 #include <curand.h>
 #include <curand_kernel.h>
-#include "kernals.h"
 
-__global__ void d_main(int *N_child, curandState *d_state);
 
-#endif
+__global__ void dev_main(int *N_child, curandState_t *d_state, int child_out[]);
