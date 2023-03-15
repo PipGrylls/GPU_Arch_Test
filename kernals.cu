@@ -1,6 +1,21 @@
 // -*- mode: C -*-
 
 #include "kernals.h"
+#include <stdio.h>
+
+
+cudaError_t err;  // cudaError_t is a type defined in cuda.h
+
+// Boilerplate error checking code borrowed from stackoverflow
+void gpuAssert(cudaError_t code, const char *file, int line, bool abort)
+{
+  if (code != cudaSuccess) 
+    {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+    }
+}
+
 
 __global__ void child_launch(int i, curandState_t localstate, int p_idx, int *child_out){
     // Launch

@@ -14,6 +14,8 @@ extern "C" {
 
 int main () {
 
+    printf("Hello World\n");
+
     unsigned long rngseed = 2894203475;  // RNG seed (fixed for development/testing)
     //unsigned long rngseed = (long)time(NULL);
     // Initialise host RNG
@@ -25,9 +27,9 @@ int main () {
         devGlobalMem, devSharedMemPerBlock, \
         devThreadsPerblock, devMultiProc;
     int maxThreads[3], maxGrid[3];
-    cudaGetDevice(&cudaDevice);
-    printf("%c", (char)(cudaDevice));
-    cudaSetDevice(cudaDevice) ;
+    gpuErrchk(cudaGetDevice(&cudaDevice));
+    printf("%i\n", cudaDevice);
+    gpuErrchk(cudaSetDevice(cudaDevice));
     // Really we should query property by property as this has some excess overhead,
     // while we dont know what properties we need this is preferable.
     cudaGetDeviceProperties(&prop, cudaDevice);
@@ -36,47 +38,52 @@ int main () {
         printf("Error, this code requires concurrant kernal launches CC>5");
         exit(1);
     }
-    printf("%c", maxThreads);
-    printf("%c", maxGrid);
+    for(int i=0; i<3; i++){
+        maxThreads[i]=prop.maxThreadsDim[i];
+        maxGrid[i]=prop.maxGridSize[i];
+    }
+    printf("Threads: %i,%i,%i\n", maxThreads[0], maxThreads[1], maxThreads[2]);
+    printf("Grids: %i,%i,%i\n", maxGrid[0], maxGrid[1], maxGrid[2]);
 
     // Get Threads and blocks
     devGlobalMem = prop.totalGlobalMem;
     devSharedMemPerBlock = prop.sharedMemPerBlock;
     devThreadsPerblock = prop.maxThreadsPerBlock;
     devMultiProc = prop.multiProcessorCount;
-    printf("%c", devGlobalMem);
-    printf("%c", devSharedMemPerBlock);
-    printf("%c", devThreadsPerblock);
-    printf("%c", devMultiProc);
+    printf("Global Mem: %i\n", devGlobalMem);
+    printf("Shared Mem: %i\n", devSharedMemPerBlock);
+    printf("Threads Per Block: %i\n", devThreadsPerblock);
+    printf("MultiProc: %i\n", devMultiProc);
+    fflush(stdout);
        
     int N_bl = 5; //we are going to span 5 blocks
     int N_th = 5; //with 5 threads
     int *N_child; //= 5; // which all launch 5 children
-    cudaMallocHost( (void **)&N_child, sizeof(int) );
+    gpuErrchk(cudaMallocHost( (void **)&N_child, sizeof(int) ));
     *N_child = 5;
     // Initilise RNG on GPU
     curandState *d_state;
-    cudaMalloc( (void **)&d_state, N_bl*N_th*sizeof(curandState) );
+    gpuErrchk(cudaMalloc( (void **)&d_state, N_bl*N_th*sizeof(curandState) ));
     unsigned long long gpuseed = (unsigned long long)rngseed;
 
     // create global memory array for child output
     int *host_child_out;
-    cudaMallocHost( (void **)&host_child_out, (*N_child)*N_th*N_bl*sizeof(int));
+    gpuErrchk(cudaMallocHost( (void **)&host_child_out, (*N_child)*N_th*N_bl*sizeof(int)));
 
     // Create varable to instuct dmain on how to launch children
 
     int *dev_N_child[N_bl];
     for (int i=0;i<N_bl;i++){
-        cudaMalloc( (void**)&dev_N_child[i], sizeof((*N_child)) );
+        gpuErrchk(cudaMalloc( (void**)&dev_N_child[i], sizeof((*N_child)) ));
     }
 
     // dynamically sized arrays
-    int **dev_child_out;
+    int *dev_child_out[N_bl];
     cudaStream_t streams[N_bl];
 
     for (int i=0;i<N_bl;i++){
-        cudaStreamCreate(&streams[i]);
-        cudaMalloc( (void**)&dev_child_out[i], (*N_child)*N_th*sizeof(int) );
+        gpuErrchk(cudaStreamCreate(&streams[i]));
+        gpuErrchk(cudaMalloc( (void**)&dev_child_out[i], (*N_child)*N_th*sizeof(int) ));
     }
     for (int i=0;i<N_bl;i++){
         // init the RNG
@@ -84,33 +91,39 @@ int main () {
     }
     for (int i=0;i<N_bl;i++){
         // Launch d_main
-        cudaMemcpyAsync(dev_N_child, N_child, sizeof(int), cudaMemcpyDeviceToHost,  streams[i]);
+        gpuErrchk(cudaMemcpyAsync(dev_N_child, N_child, sizeof(int), cudaMemcpyDeviceToHost,  streams[i]));
     }
     for (int i=0;i<N_bl;i++){
         dev_main<<<1,N_th,0,streams[i]>>>(N_child, d_state, dev_child_out[i]);
     }
 
+    printf("problem here?\n");
+    fflush(stdout);
     for (int i=0;i<N_bl;i++){
-        cudaMemcpyAsync(host_child_out+i*(*N_child)*N_th, dev_child_out, (*N_child)*N_th*sizeof(int), cudaMemcpyDeviceToHost, streams[i]);
+        gpuErrchk(cudaMemcpyAsync(host_child_out+i*(*N_child)*N_th, dev_child_out, (*N_child)*N_th*sizeof(int), cudaMemcpyDeviceToHost, streams[i]));
     }
 
     //Synchronise
 
     for (int i=0;i<N_bl;i++){
-        cudaFree(dev_child_out);
-        cudaStreamDestroy(streams[i]);
+        gpuErrchk(cudaFree(dev_child_out));
+        gpuErrchk(cudaStreamDestroy(streams[i]));
     }
 
-
-    printf("%s", host_child_out);
+    for (int i=0; i<(*N_child)*N_th*N_bl;i++){
+        printf("Host Out:");
+        printf("%i ", host_child_out[i]);
+        printf("\n");
+    }
     // Free the memory
-    cudaFreeHost(host_child_out);
+    gpuErrchk(cudaFreeHost(host_child_out));
     for (int i=0;i<N_bl;i++){
-        cudaFree(dev_N_child[i]);
+        gpuErrchk(cudaFree(dev_N_child[i]));
     }
 
     // Output
     printf("Done!");
+    fflush(stdout);
 
     return 0;
 
