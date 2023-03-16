@@ -91,38 +91,43 @@ int main () {
     }
     for (int i=0;i<N_bl;i++){
         // Launch d_main
-        gpuErrchk(cudaMemcpyAsync(dev_N_child, N_child, sizeof(int), cudaMemcpyDeviceToHost,  streams[i]));
+        gpuErrchk(cudaMemcpyAsync(dev_N_child[i], N_child, sizeof(int), cudaMemcpyDeviceToHost,  streams[i]));
     }
     for (int i=0;i<N_bl;i++){
         dev_main<<<1,N_th,0,streams[i]>>>(N_child, d_state, dev_child_out[i]);
     }
 
-    printf("problem here?\n");
-    fflush(stdout);
+
     for (int i=0;i<N_bl;i++){
-        gpuErrchk(cudaMemcpyAsync(host_child_out+i*(*N_child)*N_th, dev_child_out, (*N_child)*N_th*sizeof(int), cudaMemcpyDeviceToHost, streams[i]));
+        gpuErrchk(cudaMemcpyAsync(host_child_out+i*(*N_child)*N_th, dev_child_out[i], (*N_child)*N_th*sizeof(int), cudaMemcpyDeviceToHost, streams[i]));
     }
 
-    //Synchronise
-
+    //Synchronise 
     for (int i=0;i<N_bl;i++){
-        gpuErrchk(cudaFree(dev_child_out));
+        gpuErrchk(cudaStreamSynchronize(streams[i]));
+    } 
+
+    //Print
+    fflush(stdout);
+    printf("Host Out:");
+    for (int i=0; i<(*N_child)*N_th*N_bl;i++){
+        printf("%i ", host_child_out[i]);
+    }
+    printf("\n");
+    fflush(stdout);
+
+
+    // Free the memory
+    for (int i=0;i<N_bl;i++){
+        gpuErrchk(cudaFree(dev_child_out[i]));
+        gpuErrchk(cudaFree(dev_N_child[i]));
         gpuErrchk(cudaStreamDestroy(streams[i]));
     }
-
-    for (int i=0; i<(*N_child)*N_th*N_bl;i++){
-        printf("Host Out:");
-        printf("%i ", host_child_out[i]);
-        printf("\n");
-    }
-    // Free the memory
     gpuErrchk(cudaFreeHost(host_child_out));
-    for (int i=0;i<N_bl;i++){
-        gpuErrchk(cudaFree(dev_N_child[i]));
-    }
 
-    // Output
-    printf("Done!");
+
+    // Finish
+    printf("Done!\n");
     fflush(stdout);
 
     return 0;

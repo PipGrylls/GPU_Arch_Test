@@ -27,7 +27,7 @@ __global__ void child_launch(int i, curandState_t localstate, int p_idx, int *ch
     
     // get a random number between 0 and 1
     float rnd_float = curand_uniform(&localstate);
-    int rnd = int(rnd_float*10); //convert this to an interger number of seconds 0 to 10
+    int rnd = int(rnd_float*10.); //convert this to an interger number of seconds 0 to 10
 
 
     // transfer id to an array in memory
